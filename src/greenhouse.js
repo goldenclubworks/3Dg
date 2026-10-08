@@ -22,7 +22,7 @@ D.RI = D.RO - D.ARCH_T;    // Innenkante Bogen
 export const TIERS = {
   high:   { Na: 180, rb: 3, arch: 140, bevel: 3, crease: 0.62, lathe: 24, cyl: 24, pitch: 0.3 },
   mobile: { Na: 96,  rb: 2, arch: 72,  bevel: 2, crease: 0.95, lathe: 12, cyl: 14, pitch: 0.36 },
-  ar:     { Na: 64,  rb: 1, arch: 56,  bevel: 1, crease: 1.2,  lathe: 10, cyl: 10, pitch: 0.42 },
+  ar:     { Na: 48,  rb: 1, arch: 40,  bevel: 1, crease: 1.2,  lathe: 8,  cyl: 8,  pitch: 0.55, cross: false },
 };
 
 const Y = new THREE.Vector3(0, 1, 0);
@@ -180,6 +180,16 @@ function roofSheetGeo(z0, z1, st) {
   ]);
 }
 
+/** Rückseite für Formate ohne Doppelseitigkeit (USDZ): gespiegelte Dreiecke + umgekehrte Normalen */
+function flipGeo(g) {
+  const f = g.clone();
+  const idx = f.index;
+  if (idx) for (let i = 0; i < idx.count; i += 3) { const a = idx.getX(i), b = idx.getX(i + 2); idx.setX(i, b); idx.setX(i + 2, a); }
+  const n = f.attributes.normal;
+  for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  return f;
+}
+
 function flutedPlane(shape, seg) {
   const g = new THREE.ShapeGeometry(shape, seg);
   const p = g.attributes.position, uv = g.attributes.uv;
@@ -202,8 +212,10 @@ function screwParts(tier) {
   const prof = [[0, 0.0074], [0.0035, 0.0073], [0.0066, 0.0064], [0.0079, 0.0052], [0.0092, 0.0047], [0.0096, 0.0035], [0.0, 0.0035]]
     .map(([x, y]) => new THREE.Vector2(x, y));
   met.push(new THREE.LatheGeometry(prof, tier.lathe));
-  rub.push(new THREE.BoxGeometry(0.0064, 0.0005, 0.0012).translate(0, 0.0072, 0));
-  rub.push(new THREE.BoxGeometry(0.0012, 0.0005, 0.0064).translate(0, 0.0072, 0));
+  if (tier.cross !== false) {
+    rub.push(new THREE.BoxGeometry(0.0064, 0.0005, 0.0012).translate(0, 0.0072, 0));
+    rub.push(new THREE.BoxGeometry(0.0012, 0.0005, 0.0064).translate(0, 0.0072, 0));
+  }
   return { rub, met };
 }
 
@@ -239,6 +251,11 @@ function hingeLeaf(axis) {
 export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality = 'high' }) {
   const tier = TIERS[quality] || TIERS.high;
   const boxGeo = makeBox(tier);
+  const twoSided = quality === 'ar';
+  const twin = (mesh, parent) => {
+    if (!twoSided) return;
+    const t = mesh.clone(); t.geometry = flipGeo(mesh.geometry); t.name = mesh.name + '_rueck'; parent.add(t);
+  };
   const L = length, hz = L / 2;
   const group = new THREE.Group();
   group.name = `gewaechshaus_${L}m`;
@@ -408,7 +425,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     fp.position.set(0, 0, sign > 0 ? zF - 0.02 : -(zF - 0.02));
     fp.rotation.y = sign > 0 ? 0 : Math.PI;
     fp.name = 'stirnplatte'; fp.renderOrder = 3;
-    frontSheets.add(fp);
+    frontSheets.add(fp); twin(fp, frontSheets);
 
     /* Tür (Drehpunkt rechts, öffnet nach außen) */
     const doorPivot = new THREE.Group();
@@ -425,7 +442,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     doorPivot.add(dMesh);
     const dSheet = new THREE.Mesh(rectPlane(leafW - 0.04, leafH - 0.04, -leafW / 2, leafH / 2), mats.sheetDouble);
     dSheet.position.z = -0.017; dSheet.renderOrder = 3; dSheet.name = 'tuerplatte';
-    doorPivot.add(dSheet);
+    doorPivot.add(dSheet); twin(dSheet, doorPivot);
     const dm = [];
     for (const hy of [0.3, 1.15]) dm.push(hingeLeaf('y').translate(0, hy - yDoorBot, 0));
     // Griff + Riegel außen, Haken innen
@@ -454,7 +471,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     winPivot.add(wMesh);
     const wSheet = new THREE.Mesh(rectPlane(wW - 0.04, wH - 0.04, 0, -wH / 2), mats.sheetDouble);
     wSheet.position.z = -0.017; wSheet.renderOrder = 3; wSheet.name = 'fensterplatte';
-    winPivot.add(wSheet);
+    winPivot.add(wSheet); twin(wSheet, winPivot);
     const wm = [hingeLeaf('x').translate(-0.3, 0, 0), hingeLeaf('x').translate(0.3, 0, 0)];
     wm.push(new THREE.BoxGeometry(0.05, 0.02, 0.002).translate(0, -wH + 0.03, 0.0));
     wm.push(new THREE.BoxGeometry(0.012, 0.03, 0.01).translate(0, -wH + 0.03, 0.006));

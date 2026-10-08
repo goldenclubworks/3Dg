@@ -42,6 +42,22 @@
     #toast.show { opacity: 1; }
     #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); font-size: 14px; color: var(--muted); transition: opacity .5s; }
     #loading.done { opacity: 0; pointer-events: none; }
+
+    #vignette { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(10,16,12,.22) 100%); }
+    #walkui { display: none; }
+    body.walking #walkui { display: block; }
+    body.walking #bar, body.walking #info { display: none; }
+    #b-exit { position: fixed; top: max(14px, env(safe-area-inset-top)); right: 14px; background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); z-index: 5; }
+    #hint { left: 50%; transform: translateX(-50%); bottom: 24px; padding: 10px 14px; font-size: 13px; opacity: 0; transition: opacity .4s; pointer-events: none; text-align: center; width: max-content; max-width: calc(100vw - 32px); }
+    #hint.show { opacity: 1; }
+    #joy { display: none; position: fixed; left: max(22px, env(safe-area-inset-left)); bottom: max(34px, env(safe-area-inset-bottom)); width: 112px; height: 112px; border-radius: 50%; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); backdrop-filter: blur(6px); touch-action: none; }
+    #joy-knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: rgba(255,255,255,.7); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+    @media (pointer: coarse) { body.walking #joy { display: block; } #hint { bottom: 170px; } }
+    #modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8,12,10,.45); z-index: 20; padding: 16px; }
+    #modal[hidden] { display: none; }
+    #modal-body.card { position: static; padding: 20px; max-width: 380px; text-align: center; }
+    #modal-body h2 { font-size: 17px; margin: 0 0 12px; } #modal-body p { font-size: 13.5px; line-height: 1.5; color: var(--muted); margin: 10px 0; } #modal-body p.small { font-size: 12px; }
+    .qr { width: 200px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 6px; } .qr svg { display: block; width: 100%; height: auto; }
     #b-more { display: none; }
     @media (max-width: 640px) {
       #info { right: 16px; max-width: none; padding: 10px 12px; } #info p, #info dl { display: none; } #info h1 { margin: 0; font-size: 15px; }
@@ -82,8 +98,17 @@
     <div class="grp more"><label>Ansicht</label>
       <div class="seg" id="views"><button data-v="orbit">Außen</button><button data-v="front">Front</button><button data-v="inside">Innen</button><button data-v="top">Oben</button></div></div>
     <div class="grp more"><label for="sun">Sonne</label><input id="sun" type="range" min="12" max="70" value="38" /></div>
-    <div class="grp"><button id="b-more" aria-expanded="false" aria-label="Mehr Optionen">Mehr ⋯</button><button class="ghost more" id="b-glb">GLB</button><button class="solid" id="b-ar">In AR ansehen</button></div>
+    <div class="grp"><button class="ghost" id="b-walk">Reingehen</button><button id="b-more" aria-expanded="false" aria-label="Mehr Optionen">Mehr ⋯</button><button class="solid" id="b-ar">In AR ansehen</button></div>
   </section>
+
+  <div id="walkui">
+    <button class="ghost" id="b-exit">Beenden ✕</button>
+    <div id="hint" class="panel">Ziehen = umsehen · W A S D / Pfeiltasten = gehen · Shift = schneller · Tür antippen = öffnen · Esc = beenden</div>
+    <div id="joy" aria-label="Joystick"><div id="joy-knob"></div></div>
+  </div>
+
+  <div id="modal" hidden><div id="modal-body" class="panel card"></div></div>
+  <div id="vignette"></div>
 
   <div id="loading">Gewächshaus wird erzeugt …</div>
   <script type="module" src="/src/main.js"></script>
