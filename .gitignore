@@ -1,0 +1,6 @@
+node_modules
+dist
+.DS_Store
+.vite
+# Referenzbilder (Herstellerunterlagen/Produktfotos) nicht ins öffentliche Repo
+IMG_*

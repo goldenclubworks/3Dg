@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Gewächshaus 3D – Konfigurator</title>
+  <style>
+    :root {
+      --bg: #e9eef1; --panel: rgba(255,255,255,.78); --ink: #16221b; --muted: #5b6b61;
+      --line: rgba(22,34,27,.12); --accent: #1f7a4d; --accent-ink: #fff;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #11181a; --panel: rgba(24,32,30,.78); --ink: #e8f0eb; --muted: #9fb2a6; --line: rgba(232,240,235,.14); --accent: #4fc08a; --accent-ink: #06210f; }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font); overflow: hidden; }
+    canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+    .panel { position: fixed; background: var(--panel); backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3);
+      border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+    #info { top: max(16px, env(safe-area-inset-top)); left: 16px; padding: 14px 16px; max-width: 300px; }
+    #info h1 { font-size: 16px; margin: 0 0 4px; letter-spacing: -.01em; }
+    #info p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
+    #info dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 10px 0 0; font-size: 13px; }
+    #info dt { color: var(--muted); } #info dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+    #bar { left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); width: min(920px, calc(100vw - 32px));
+      padding: 12px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: center; }
+    .grp { display: flex; align-items: center; gap: 8px; }
+    .grp > label { font-size: 12px; color: var(--muted); }
+    .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    button { font: inherit; font-size: 13px; color: var(--ink); background: transparent; border: 0; padding: 8px 12px; cursor: pointer; min-height: 36px; }
+    .seg button + button { border-left: 1px solid var(--line); }
+    button:hover { background: rgba(127,127,127,.12); }
+    button[aria-pressed="true"], button.on { background: var(--accent); color: var(--accent-ink); }
+    button.solid { background: var(--accent); color: var(--accent-ink); border-radius: 10px; font-weight: 600; padding: 8px 14px; }
+    button.ghost { border: 1px solid var(--line); border-radius: 10px; }
+    input[type=range] { accent-color: var(--accent); width: 110px; }
+    #toast { top: 16px; left: 50%; transform: translateX(-50%); padding: 10px 14px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s; max-width: calc(100vw - 32px); text-align: center; }
+    #toast.show { opacity: 1; }
+    #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); font-size: 14px; color: var(--muted); transition: opacity .5s; }
+    #loading.done { opacity: 0; pointer-events: none; }
+    @media (max-width: 640px) { #info { right: 16px; max-width: none; } #info dl { display: none; } }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <section id="info" class="panel">
+    <h1>Gewächshaus 3 × <span id="i-len">4</span> m</h1>
+    <p>Bogenprofil, Hohlkammerplatten, Tür und Lüftungsfenster. Tür/Fenster anklicken zum Öffnen.</p>
+    <dl>
+      <dt>Breite</dt><dd>3,00 m</dd>
+      <dt>Länge</dt><dd id="d-len">4,00 m</dd>
+      <dt>Höhe</dt><dd>2,00 m</dd>
+      <dt>Grundfläche</dt><dd id="d-area">12 m²</dd>
+      <dt>Bögen</dt><dd id="d-arch">–</dd>
+    </dl>
+  </section>
+
+  <div id="toast" class="panel" role="status"></div>
+
+  <section id="bar" class="panel">
+    <div class="grp"><label>Länge</label>
+      <div class="seg" id="len">
+        <button data-v="4" aria-pressed="true">4 m</button><button data-v="6">6 m</button><button data-v="8">8 m</button><button data-v="10">10 m</button>
+      </div></div>
+    <div class="grp"><label>Bögen</label>
+      <div class="seg" id="spc"><button data-v="standard">1 m</button><button data-v="dense" aria-pressed="true">0,67 m</button></div></div>
+    <div class="grp"><label>Öffnen</label>
+      <div class="seg"><button id="b-door" aria-pressed="false">Tür</button><button id="b-win" aria-pressed="false">Fenster</button></div></div>
+    <div class="grp"><label>Ansicht</label>
+      <div class="seg" id="views"><button data-v="orbit">Außen</button><button data-v="front">Front</button><button data-v="inside">Innen</button><button data-v="top">Oben</button></div></div>
+    <div class="grp"><label for="sun">Sonne</label><input id="sun" type="range" min="12" max="70" value="38" /></div>
+    <div class="grp"><button class="ghost" id="b-glb">GLB</button><button class="solid" id="b-ar">In AR ansehen</button></div>
+  </section>
+
+  <div id="loading">Gewächshaus wird erzeugt …</div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
