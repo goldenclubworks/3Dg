@@ -3,6 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#1f7a4d" />
+  <meta name="description" content="3D-Konfigurator für Tonnengewächshäuser (3 × 4–10 m) mit AR-Ansicht" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M3 27V17C3 9 9 5 16 5s13 4 13 12v10z%27 fill=%27%231f7a4d%27/%3E%3C/svg%3E" />
   <title>Gewächshaus 3D – Konfigurator</title>
   <style>
     :root {
@@ -39,7 +42,15 @@
     #toast.show { opacity: 1; }
     #loading { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); font-size: 14px; color: var(--muted); transition: opacity .5s; }
     #loading.done { opacity: 0; pointer-events: none; }
-    @media (max-width: 640px) { #info { right: 16px; max-width: none; } #info dl { display: none; } }
+    #b-more { display: none; }
+    @media (max-width: 640px) {
+      #info { right: 16px; max-width: none; padding: 10px 12px; } #info p, #info dl { display: none; } #info h1 { margin: 0; font-size: 15px; }
+      #bar { padding: 8px; gap: 8px 12px; width: calc(100vw - 24px); bottom: max(10px, env(safe-area-inset-bottom)); }
+      #bar .more { display: none; } #bar.open .more { display: flex; }
+      #b-more { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; }
+      .grp > label { display: none; }
+      button { padding: 8px 10px; min-height: 40px; }
+    }
   </style>
 </head>
 <body>
@@ -64,14 +75,14 @@
       <div class="seg" id="len">
         <button data-v="4" aria-pressed="true">4 m</button><button data-v="6">6 m</button><button data-v="8">8 m</button><button data-v="10">10 m</button>
       </div></div>
-    <div class="grp"><label>Bögen</label>
+    <div class="grp more"><label>Bögen</label>
       <div class="seg" id="spc"><button data-v="standard">1 m</button><button data-v="dense" aria-pressed="true">0,67 m</button></div></div>
     <div class="grp"><label>Öffnen</label>
       <div class="seg"><button id="b-door" aria-pressed="false">Tür</button><button id="b-win" aria-pressed="false">Fenster</button></div></div>
-    <div class="grp"><label>Ansicht</label>
+    <div class="grp more"><label>Ansicht</label>
       <div class="seg" id="views"><button data-v="orbit">Außen</button><button data-v="front">Front</button><button data-v="inside">Innen</button><button data-v="top">Oben</button></div></div>
-    <div class="grp"><label for="sun">Sonne</label><input id="sun" type="range" min="12" max="70" value="38" /></div>
-    <div class="grp"><button class="ghost" id="b-glb">GLB</button><button class="solid" id="b-ar">In AR ansehen</button></div>
+    <div class="grp more"><label for="sun">Sonne</label><input id="sun" type="range" min="12" max="70" value="38" /></div>
+    <div class="grp"><button id="b-more" aria-expanded="false" aria-label="Mehr Optionen">Mehr ⋯</button><button class="ghost more" id="b-glb">GLB</button><button class="solid" id="b-ar">In AR ansehen</button></div>
   </section>
 
   <div id="loading">Gewächshaus wird erzeugt …</div>

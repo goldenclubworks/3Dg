@@ -101,7 +101,7 @@ export function flutedSheetTextures() {
     const f = t - Math.floor(t);            // 0..1 innerhalb einer Kammer
     const wall = Math.exp(-Math.pow((f < 0.5 ? f : 1 - f) / 0.035, 2)); // Steg bei f=0/1
     const lens = Math.sin(f * Math.PI);     // leichte Wölbung der Oberfläche
-    const a = 0.34 + 0.50 * wall + 0.10 * (1 - lens);
+    const a = 0.25 + 0.50 * wall + 0.10 * (1 - lens);
     const shade = 232 - 70 * wall;
     // Normal: Steigung der Oberfläche in u
     const slope = Math.cos(f * Math.PI) * 0.35 + (f < 0.04 || f > 0.96 ? 0 : 0);
