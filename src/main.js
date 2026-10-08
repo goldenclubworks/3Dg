@@ -20,14 +20,25 @@ const isTouchPhone = /iPhone|iPad|iPod|Android/i.test(ua) || (navigator.platform
 const isMobile = params.has('mobile') || matchMedia('(pointer: coarse)').matches || Math.min(innerWidth, innerHeight) < 600;
 const quality = params.get('q') || (isMobile ? 'mobile' : 'high');
 const lockQuality = params.has('fixed');
+if (params.has('slow')) setInterval(() => { const t = performance.now(); while (performance.now() - t < +params.get('slow')) { /* Test: künstlich langsames Gerät */ } }, 0);
+// Grafikmodus: 'quality' = MSAA + Echtzeit-Himmel + PBR-Boden (Standard), 'smooth' = FXAA-Pipeline + gebackener Himmel + einfacher Boden.
+// Der Wechsel erfolgt nur bei dauerhaft niedriger Framerate (automatisch) oder per Auswahl unter „Mehr“.
+const store = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* privat */ } },
+  del: (k) => { try { localStorage.removeItem(k); } catch { /* privat */ } },
+};
+const gfxPref = params.get('gfx') || store.get('gfx');                 // vom Nutzer gewählt
+const gfx = gfxPref || store.get('gfxAuto') || 'quality';              // sonst automatisch ermittelt
+const smooth = gfx === 'smooth';
 
 /* ---------- Stimmung (ruhig, nicht grell) ---------- */
-const LOOK = { exposure: 0.62, sunElev: 30, sunAz: 140, envIntensity: 0.36, sunBase: 1.0, sunGain: 2.8 };
+const LOOK = { exposure: 0.62, sunElev: 30, sunAz: 140, envIntensity: 0.6, sunBase: 1.0, sunGain: 2.8 };
 
 /* ---------- Renderer / Szene ---------- */
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-let dpr = Math.min(devicePixelRatio, 2);
-const dprMax = dpr;
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: !smooth, powerPreference: 'high-performance' });
+let dpr = Math.min(devicePixelRatio, 2, parseFloat(store.get('dprCap')) || 9);   // beim ersten Start ermittelt
+const dprMax = Math.min(devicePixelRatio, 2);
 renderer.setPixelRatio(dpr);
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = LOOK.exposure;
@@ -36,7 +47,7 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.shadowMap.autoUpdate = false;             // Schatten nur neu berechnen, wenn sich die Szene ändert
 
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 2500);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.2, 2000);   // Near 0,2 m: genug Tiefenpräzision auch bei 16-Bit-Depth (Safari), kein Z-Fighting von oben
 camera.rotation.order = 'YXZ';
 camera.position.set(6.8, 3.0, 7.8);
 const controls = new OrbitControls(camera, canvas);
@@ -59,38 +70,43 @@ const mkSky = (scale) => {
   u.cloudCoverage.value = 0.5; u.cloudDensity.value = 0.5;
   return s;
 };
-// Der Himmel (Shader mit Wolken-fBm) ist pro Pixel teuer. Er wird deshalb nur bei Sonnenänderung
-// in eine HDR-Cube-Map gebacken; pro Frame kostet der Hintergrund dann nur noch einen Texturzugriff.
 const envSky = mkSky(50); const envScene = new THREE.Scene(); envScene.add(envSky);
-const cubeRT = new THREE.WebGLCubeRenderTarget(isMobile ? 768 : 1024, { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-const cubeCam = new THREE.CubeCamera(0.1, 100, cubeRT);
 const sun = new THREE.DirectionalLight(0xffeedd, 3);
 sun.castShadow = true; scene.add(sun, sun.target);
 sun.shadow.intensity = 0.45;                       // weiche, helle Schatten statt harter Konturen
 scene.add(new THREE.HemisphereLight(0xd3e2f2, 0x4f5a42, 0.2));
 scene.environmentIntensity = LOOK.envIntensity;
-const skyMat = new THREE.ShaderMaterial({
-  uniforms: { tCube: { value: null } }, side: THREE.BackSide, depthWrite: false, depthTest: true, fog: false,
-  vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: 'uniform samplerCube tCube; varying vec3 vDir; void main(){ gl_FragColor = vec4(textureCube(tCube, normalize(vDir)).rgb, 1.0); }',
-});
-const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 12), skyMat);
-skyDome.frustumCulled = false; skyDome.renderOrder = 1; skyDome.name = 'himmel';
-scene.add(skyDome);
+// quality: Echtzeit-Himmel (Shader, mit Wolken) – wird NACH dem Boden gezeichnet, Early-Z spart die verdeckten Pixel.
+// smooth:  Himmel einmalig in eine HDR-Cube-Map gebacken, pro Frame nur ein Texturzugriff.
+let sky = null, skyMat = null, cubeRT = null, cubeCam = null;
+if (!smooth) {
+  sky = mkSky(1200); sky.renderOrder = 1; scene.add(sky);
+} else {
+  cubeRT = new THREE.WebGLCubeRenderTarget(isMobile ? 768 : 1024, { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  cubeCam = new THREE.CubeCamera(0.1, 100, cubeRT);
+  skyMat = new THREE.ShaderMaterial({
+    uniforms: { tCube: { value: null } }, side: THREE.BackSide, depthWrite: false, depthTest: true, fog: false,
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform samplerCube tCube; varying vec3 vDir; void main(){ gl_FragColor = vec4(textureCube(tCube, normalize(vDir)).rgb, 1.0); }',
+  });
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(1500, 24, 12), skyMat);
+  dome.frustumCulled = false; dome.renderOrder = 1; dome.name = 'himmel';
+  scene.add(dome);
+}
 let envRT = null;
 function setSun(elevDeg, azDeg = LOOK.sunAz) {
   const phi = THREE.MathUtils.degToRad(90 - elevDeg), theta = THREE.MathUtils.degToRad(azDeg);
   const dir = new THREE.Vector3().setFromSphericalCoords(1, phi, theta);
   envSky.material.uniforms.sunPosition.value.copy(dir);
+  if (sky) sky.material.uniforms.sunPosition.value.copy(dir);
   const e = Math.sin(THREE.MathUtils.degToRad(elevDeg));
   sun.position.copy(dir).multiplyScalar(60);
   sun.intensity = LOOK.sunBase + LOOK.sunGain * e;
   sun.color.setHSL(0.085, 0.75, 0.66 + 0.2 * e);
-  cubeCam.update(renderer, envScene);
   if (envRT) envRT.dispose();
-  envRT = pmrem.fromCubemap(cubeRT.texture);
+  envRT = pmrem.fromScene(envScene, 0, 0.1, 100, { size: isMobile ? 256 : 512 });
   scene.environment = envRT.texture;
-  skyMat.uniforms.tCube.value = cubeRT.texture;
+  if (cubeCam) { cubeCam.update(renderer, envScene); skyMat.uniforms.tCube.value = cubeRT.texture; }
   invalidate(true);
 }
 
@@ -112,20 +128,33 @@ const gGeo = new THREE.PlaneGeometry(1800, 1800, 1, 1).rotateX(-Math.PI / 2);
 { const uv = gGeo.attributes.uv, p = gGeo.attributes.position;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, p.getX(i) / 5, -p.getZ(i) / 5); }
 grass.repeat.set(1, 1);
-const groundMat = new THREE.MeshLambertMaterial({ map: grass });
+// quality: PBR-Boden mit Bump und mehrstufigem Wert-Rauschen (originale Optik). smooth: Lambert + Textur-Rauschen.
+const groundMat = smooth
+  ? new THREE.MeshLambertMaterial({ map: grass })
+  : new THREE.MeshStandardMaterial({ map: grass, bumpMap: grass, bumpScale: 1.2, roughness: 0.95, metalness: 0 });
 groundMat.onBeforeCompile = (sh) => {
   sh.uniforms.uNoise = { value: tex.noise };
   sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
+  const noiseFn = smooth ? `
+    uniform sampler2D uNoise;
+    float macroNoise(vec2 p){
+      mat2 R1 = mat2(0.866, -0.5, 0.5, 0.866), R2 = mat2(0.5, 0.866, -0.866, 0.5);
+      float n1 = texture2D(uNoise, R1 * p / 53.0).r, n2 = texture2D(uNoise, R2 * p / 13.0 + 0.37).r, n3 = texture2D(uNoise, R1 * p / 4.3 + 0.71).r;
+      return clamp((0.5 * n1 + 0.3 * n2 + 0.2 * n3 - 0.5) * 2.2 + 0.5, 0.0, 1.0);
+    }` : `
+    float h21(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+      return mix(mix(h21(i), h21(i+vec2(1,0)), f.x), mix(h21(i+vec2(0,1)), h21(i+vec2(1,1)), f.x), f.y); }
+    float macroNoise(vec2 p){ return 0.5*vn(p/41.0) + 0.3*vn(p/11.0) + 0.2*vn(p/2.7); }`;
   sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
-    varying vec3 vWPos; uniform sampler2D uNoise;`)
+    varying vec3 vWPos;${noiseFn}`)
     .replace('#include <map_fragment>', `#include <map_fragment>
-    mat2 R1 = mat2(0.866, -0.5, 0.5, 0.866), R2 = mat2(0.5, 0.866, -0.866, 0.5);
-    float n1 = texture2D(uNoise, R1 * vWPos.xz / 53.0).r, n2 = texture2D(uNoise, R2 * vWPos.xz / 13.0 + 0.37).r, n3 = texture2D(uNoise, R1 * vWPos.xz / 4.3 + 0.71).r;
-    float mn = clamp((0.55 * n1 + 0.33 * n2 + 0.12 * n3 - 0.5) * 1.5 + 0.5, 0.0, 1.0);
-    diffuseColor.rgb *= mix(vec3(0.72, 0.82, 0.6), vec3(1.08, 1.05, 0.9), mn);`);
+    float mn = macroNoise(vWPos.xz);
+    diffuseColor.rgb *= mix(vec3(0.62, 0.74, 0.5), vec3(1.1, 1.06, 0.86), mn);`);
 };
 const ground = new THREE.Mesh(gGeo, groundMat);
+ground.position.y = -0.02;                          // 2 cm unter dem Rahmen: kein Z-Fighting mit Winkelprofil/Kontaktschatten
 ground.receiveShadow = false;                       // kein Gewächshaus-Schatten auf dem Rasen
 ground.name = 'boden';
 scene.add(ground);
@@ -140,7 +169,7 @@ const contactTex = (() => {
 })();
 const contact = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
   new THREE.MeshBasicMaterial({ map: contactTex, transparent: true, opacity: 0.4, depthWrite: false, fog: false }));
-contact.position.y = 0.004; contact.renderOrder = 1; contact.name = 'kontaktschatten';
+contact.position.y = -0.008; contact.renderOrder = 1; contact.name = 'kontaktschatten';
 scene.add(contact);
 
 /* ---------- Gewächshaus ---------- */
@@ -170,13 +199,11 @@ function rebuild() {
 }
 
 /* ---------- Render-Pipeline ----------
-   MSAA am Canvas kostete auf Apple-GPUs ~75 % der Frame-Zeit. Stattdessen:
-   HDR-Target ohne MSAA -> OutputPass -> FXAA (GTAO kostete ~11 ms/Frame und ist entfernt; AO ist im Boden gebacken)
-   (ein günstiger Vollbild-Pass; MSAA-Targets sind auf Apple-GPUs mehrfach teurer) */
+   quality: direkt auf den MSAA-Canvas (beste Kantenqualität).
+   smooth:  HDR-Target ohne MSAA -> OutputPass -> FXAA (günstiger auf schwacher/ausgelasteter GPU). */
 let composer = null, fxaa = null;
-{
-  const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 0 });
-  composer = new EffectComposer(renderer, rt);
+if (smooth) {
+  composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 0 }));
   composer.addPass(new RenderPass(scene, camera));
   composer.addPass(new OutputPass());
   fxaa = new ShaderPass(FXAAShader); composer.addPass(fxaa);
@@ -243,7 +270,7 @@ function exitWalk() {
   if (!walk.on) return;
   walk.on = false; walk.keys.clear(); walk.joy.x = walk.joy.y = 0; walk.look = null;
   document.body.classList.remove('walking');
-  camera.fov = 38; camera.near = 0.05; camera.updateProjectionMatrix();
+  camera.fov = 38; camera.near = 0.2; camera.updateProjectionMatrix();
   camera.rotation.set(0, 0, 0);
   controls.enabled = true;
   camera.position.copy(walk.saved.pos); controls.target.copy(walk.saved.target); controls.update();
@@ -349,6 +376,13 @@ const toggle = (kind, btn) => { gh.setLeaf(kind, !gh.isOpen(kind)); btn.setAttri
 $('#b-door').addEventListener('click', (e) => toggle('door', e.currentTarget));
 $('#b-win').addEventListener('click', (e) => toggle('window', e.currentTarget));
 $('#sun').addEventListener('change', (e) => setSun(+e.target.value));
+segPress($('#gfx'), gfxPref || 'auto');
+$('#gfx').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const v = b.dataset.v;
+  if (v === 'auto') { store.del('gfx'); store.del('gfxAuto'); } else store.set('gfx', v);
+  location.reload();
+});
 $('#b-more').addEventListener('click', (e) => { const o = $('#bar').classList.toggle('open'); e.currentTarget.setAttribute('aria-expanded', String(o)); });
 
 // Tür/Fenster per Tippen/Klick
@@ -437,14 +471,36 @@ function resize() {
   renderer.setPixelRatio(dpr);
   renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
-  composer.setPixelRatio(dpr); composer.setSize(w, h);
+  if (composer) { composer.setPixelRatio(dpr); composer.setSize(w, h); }
   if (fxaa) fxaa.material.uniforms.resolution.value.set(1 / (w * dpr), 1 / (h * dpr));
   invalidate();
 }
 addEventListener('resize', resize); resize();
 
 const timer = new THREE.Timer();
-let acc = 0, nFrames = 0;
+let acc = 0, nFrames = 0, prevRendered = false, warm = 90, dprCeil = dpr;
+// Kalibrierung beim allerersten Start: kurze Probefahrt hinter dem Ladebildschirm. Wenn die GPU keine ~40 fps schafft,
+// wird die Auflösung gesenkt bzw. in den „smooth“-Modus gewechselt – bevor du das Gewächshaus siehst. Ergebnis wird gemerkt.
+const calib = { active: !(lockQuality || gfxPref || store.get('gfxCal')), pos: null };
+if (calib.active) { warm = 12; setTimeout(() => { if (calib.active) judge(nFrames > 4 ? acc / nFrames : 0.06); }, 7000); }
+// Bewertet die mittlere Frame-Zeit (s) und wählt die nächste Stufe
+function judge(avg) {
+  if (avg > 0.028) {                                             // < ~36 fps
+    warm = 15; acc = 0; nFrames = 0;
+    if (dpr > 1.5) { dpr = Math.max(1.5, dpr - 0.25); dprCeil = dpr; resize(); }
+    else if (!smooth && gfxPref !== 'quality') { store.set('gfxAuto', 'smooth'); store.del('gfxCal'); location.reload(); }
+    else if (dpr > 1.25) { dpr = 1.25; dprCeil = dpr; resize(); }
+    else finishCalib();
+  } else if (calib.active) finishCalib();
+  else if (avg < 0.014 && dpr < dprCeil) { dpr = Math.min(dprCeil, dpr + 0.25); resize(); }
+}
+function finishCalib() {
+  if (!calib.active) return;
+  calib.active = false; store.set('gfxCal', '1');
+  if (dpr < dprMax) store.set('dprCap', String(dpr));
+  if (calib.pos) { camera.position.copy(calib.pos); controls.update(); invalidate(); }
+  const l = $('#loading'); if (l) { l.classList.add('done'); setTimeout(() => l.remove(), 800); }
+}
 renderer.setAnimationLoop(() => {
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
@@ -456,30 +512,31 @@ renderer.setAnimationLoop(() => {
     camera.position.lerpVectors(tween.p0, tween.p1, e); controls.target.lerpVectors(tween.t0, tween.t1, e);
     if (k >= 1) tween = null;
   }
+  if (calib.active) { if (!calib.pos) calib.pos = camera.position.clone(); camera.position.applyAxisAngle(THREE.Object3D.DEFAULT_UP, dt * 0.7); moving = true; }
   if (walk.on) { if (updateWalk(dt)) moving = true; }
   else if (controls.update()) invalidate();
   if (gh.update(dt)) { moving = true; shadowDirty = true; }
   if (moving) invalidate();
-  if (dirty <= 0) { acc = 0; nFrames = 0; return; }
+  if (dirty <= 0) { acc = 0; nFrames = 0; prevRendered = false; return; }
   dirty--;
   if (shadowDirty) { renderer.shadowMap.needsUpdate = true; shadowDirty = false; }
-  composer.render();
+  if (composer) composer.render(); else renderer.render(scene, camera);
 
-  // adaptive Qualität: bei dauerhaft niedriger Framerate erst AO aus, dann Auflösung senken
-  if (!lockQuality && dt > 0) {
+  // Adaptive Qualität: nur Frames zählen, die direkt auf einen gerenderten Frame folgen (also echte Interaktion,
+  // keine Leerlauf-Lücken). Stufen: Auflösung senken -> (nur Auto) Wechsel in den „smooth“-Modus.
+  if (lockQuality || ar.building) { prevRendered = false; return; }
+  if (warm > 0) { warm--; prevRendered = true; return; }          // Shader-Kompilierung/Textur-Upload nicht mitzählen
+  if (prevRendered && dt > 0) {
     acc += dt; nFrames++;
-    if (nFrames >= 45) {
-      const avg = acc / nFrames; acc = 0; nFrames = 0;
-      if (avg > 0.024) {
-        if (dpr > (isMobile ? 1.5 : 1.25)) { dpr = Math.max(1, dpr - 0.25); resize(); }
-      } else if (avg < 0.014 && dpr < dprMax) { dpr = Math.min(dprMax, dpr + 0.25); resize(); }
-    }
+    if (nFrames >= 30) { const avg = acc / nFrames; acc = 0; nFrames = 0; judge(avg); }
   }
+  prevRendered = true;
 });
 
 setSun(LOOK.sunElev);
 $('#sun').value = LOOK.sunElev;
 rebuild();
 views.orbit(1);
-$('#loading').classList.add('done'); setTimeout(() => $('#loading').remove(), 800);
-if (params.has('debug')) window.__app = { composer, THREE, scene, camera, controls, renderer, state, rebuild, gh: () => gh, views, setSun, invalidate, enterWalk, exitWalk, walk, ar, buildAR, LOOK, info: () => ({ quality, dpr }) };
+if (!calib.active) { $('#loading').classList.add('done'); setTimeout(() => $('#loading').remove(), 800); }
+else $('#loading').textContent = 'Grafik wird angepasst …';
+if (params.has('debug')) window.__app = { composer, THREE, scene, camera, controls, renderer, state, rebuild, gh: () => gh, views, setSun, invalidate, enterWalk, exitWalk, walk, ar, buildAR, LOOK, info: () => ({ quality, gfx, dpr }) };
