@@ -19,6 +19,8 @@ export const D = {
 D.RO = D.R - D.SHEET;      // Außenkante Bogen
 D.RI = D.RO - D.ARCH_T;    // Innenkante Bogen
 
+export const DOOR = { clear: 1.62, width: 0.9 };   // lichte Höhe unter dem Kopfriegel
+
 export const TIERS = {
   high:   { Na: 180, rb: 3, arch: 140, bevel: 3, crease: 0.62, lathe: 24, cyl: 24, pitch: 0.3 },
   mobile: { Na: 96,  rb: 2, arch: 72,  bevel: 2, crease: 0.95, lathe: 12, cyl: 14, pitch: 0.36 },
@@ -28,7 +30,7 @@ export const TIERS = {
 const Y = new THREE.Vector3(0, 1, 0);
 
 /* ---------- Materialien ---------- */
-export function createMaterials(tex, envIntensity = 1) {
+export function createMaterials(tex, { lite = false, envIntensity = 1 } = {}) {
   const galv = new THREE.MeshStandardMaterial({
     name: 'verzinkter_stahl', map: tex.galv, color: 0xe3e8ec,
     metalness: 0.86, roughness: 0.4, envMapIntensity: envIntensity,
@@ -42,12 +44,14 @@ export function createMaterials(tex, envIntensity = 1) {
   const cap = new THREE.MeshStandardMaterial({
     name: 'endprofil', color: 0xdfe3e5, metalness: 0, roughness: 0.45,
   });
-  const sheet = new THREE.MeshPhysicalMaterial({
+  const sheetOpts = {
     name: 'polycarbonat_hohlkammer', map: tex.sheet.map, normalMap: tex.sheet.normalMap,
     normalScale: new THREE.Vector2(0.9, 0.9), color: 0xdcebf5, metalness: 0, roughness: 0.08,
-    clearcoat: 0.2, clearcoatRoughness: 0.05,
     transparent: true, depthWrite: false, side: THREE.FrontSide, envMapIntensity: 1.0,
-  });
+  };
+  // Mobil: schlankes Standard-Material (kein Clearcoat) – deutlich geringere Fragment-Kosten
+  const sheet = lite ? new THREE.MeshStandardMaterial(sheetOpts)
+    : new THREE.MeshPhysicalMaterial({ ...sheetOpts, clearcoat: 0.2, clearcoatRoughness: 0.05 });
   // Fresnel: an streifenden Winkeln wird die Platte opaker (Himmelsspiegelung sichtbar)
   const fresnel = (m) => {
     m.onBeforeCompile = (sh) => {
@@ -65,6 +69,17 @@ export function createMaterials(tex, envIntensity = 1) {
   const soil = new THREE.MeshStandardMaterial({
     name: 'erde', map: tex.soil.map, color: 0x6b4e3b, bumpMap: tex.soil.bump, bumpScale: 2.2, roughness: 0.96, metalness: 0,
   });
+  // gebackene Umgebungsverdunklung: Erde wird zum Rahmen hin dunkler (ersetzt Screen-Space-AO)
+  const half = { value: new THREE.Vector2(1.5, 2) };
+  soil.userData.half = half;
+  soil.onBeforeCompile = (sh) => {
+    sh.uniforms.uHalf = half;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec2 vLocal;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvLocal = position.xz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vLocal; uniform vec2 uHalf;')
+      .replace('#include <map_fragment>', `#include <map_fragment>
+      vec2 dEdge = uHalf - abs(vLocal);
+      diffuseColor.rgb *= mix(0.5, 1.0, smoothstep(0.0, 0.42, min(dEdge.x, dEdge.y)));`);
+  };
   return { galv, metal, rubber, cap, sheet, sheetDouble, soil };
 }
 
@@ -112,7 +127,7 @@ function flatten(g) {
 function mergedMesh(geos, mat, name) {
   if (!geos.length) return null;
   const mesh = new THREE.Mesh(mergeGeometries(geos.map(flatten)), mat);
-  mesh.name = name; mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.name = name; mesh.castShadow = true; mesh.receiveShadow = false;   // nur die Erde empfängt Schatten (spart Fragment-Kosten)
   return mesh;
 }
 
@@ -355,7 +370,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
   const frontSheets = new THREE.Group(); frontSheets.name = 'stirnplatten';
   const DW = 0.9;                // lichte Türbreite
   const postX = DW / 2 + 0.015;  // Mitte der Pfosten
-  const yWinTop = 1.85, yWinBot = 1.435, yDoorTop = 1.406, yDoorBot = 0.056;
+  const yWinTop = 1.87, yWinBot = 1.65, yDoorTop = 1.62, yDoorBot = 0.056;
   const braceY = 0.70;
   const archInnerY = (x) => D.WALL + Math.sqrt(D.RI * D.RI - x * x);
   const baseTop = D.LEG_H;
@@ -381,7 +396,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     }
     // Scharniere (fest)
     const pivotZ = zF - 0.003;
-    for (const hy of [0.3, 1.15]) for (const g of hingeStatic(new THREE.Vector3(DW / 2, hy, pivotZ), 'y', tier)) addS('metal', g);
+    for (const hy of [0.3, 1.3]) for (const g of hingeStatic(new THREE.Vector3(DW / 2, hy, pivotZ), 'y', tier)) addS('metal', g);
     for (const hx of [-0.3, 0.3]) for (const g of hingeStatic(new THREE.Vector3(hx, yWinTop, pivotZ), 'x', tier)) addS('metal', g);
 
     // Stirnplatten-Schrauben entlang des Rings
@@ -438,17 +453,17 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
       boxGeo(leafW - 0.06, 0.03, 0.03).translate(-leafW / 2, leafH - 0.015, -0.017),
     ];
     const dMesh = new THREE.Mesh(mergeGeometries(dparts.map(flatten)), mats.galv);
-    dMesh.castShadow = dMesh.receiveShadow = true; dMesh.name = 'tuerrahmen';
+    dMesh.castShadow = true; dMesh.name = 'tuerrahmen';
     doorPivot.add(dMesh);
     const dSheet = new THREE.Mesh(rectPlane(leafW - 0.04, leafH - 0.04, -leafW / 2, leafH / 2), mats.sheetDouble);
     dSheet.position.z = -0.017; dSheet.renderOrder = 3; dSheet.name = 'tuerplatte';
     doorPivot.add(dSheet); twin(dSheet, doorPivot);
     const dm = [];
-    for (const hy of [0.3, 1.15]) dm.push(hingeLeaf('y').translate(0, hy - yDoorBot, 0));
+    for (const hy of [0.3, 1.3]) dm.push(hingeLeaf('y').translate(0, hy - yDoorBot, 0));
     // Griff + Riegel außen, Haken innen
-    dm.push(new THREE.BoxGeometry(0.022, 0.1, 0.002).translate(-leafW + 0.035, 0.7, 0.0));
-    dm.push(new THREE.BoxGeometry(0.012, 0.075, 0.012).translate(-leafW + 0.035, 0.7, 0.007));
-    dm.push(new THREE.BoxGeometry(0.03, 0.02, 0.003).translate(-leafW + 0.02, 0.45, 0.0));
+    dm.push(new THREE.BoxGeometry(0.022, 0.1, 0.002).translate(-leafW + 0.035, 0.88, 0.0));
+    dm.push(new THREE.BoxGeometry(0.012, 0.075, 0.012).translate(-leafW + 0.035, 0.88, 0.007));
+    dm.push(new THREE.BoxGeometry(0.03, 0.02, 0.003).translate(-leafW + 0.02, 0.62, 0.0));
     dm.push(new THREE.BoxGeometry(0.05, 0.004, 0.003).translate(-leafW + 0.027, 0.9, -0.0345));      // Haken-Arm
     dm.push(new THREE.TorusGeometry(0.0045, 0.0014, 6, 12).rotateY(Math.PI / 2).translate(-leafW, 0.9, -0.0345));
     const dMetal = new THREE.Mesh(mergeGeometries(dm.map(flatten)), mats.metal);
@@ -467,7 +482,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
       boxGeo(wW - 0.06, 0.03, 0.03).translate(0, -wH + 0.015, -0.017),
     ];
     const wMesh = new THREE.Mesh(mergeGeometries(wparts.map(flatten)), mats.galv);
-    wMesh.castShadow = wMesh.receiveShadow = true; wMesh.name = 'fensterrahmen';
+    wMesh.castShadow = true; wMesh.name = 'fensterrahmen';
     winPivot.add(wMesh);
     const wSheet = new THREE.Mesh(rectPlane(wW - 0.04, wH - 0.04, 0, -wH / 2), mats.sheetDouble);
     wSheet.position.z = -0.017; wSheet.renderOrder = 3; wSheet.name = 'fensterplatte';
@@ -483,8 +498,8 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     fg.name = sign > 0 ? 'stirnseite_vorn' : 'stirnseite_hinten';
     const stays = [];
     for (const sx of [-1, 1]) {
-      const F = new THREE.Vector3(sx * postX, 1.62, zF + 0.0015);
-      const W = new THREE.Vector3(sx * (wW / 2 - 0.015), -0.13, 0.0045);
+      const F = new THREE.Vector3(sx * postX, yWinBot + 0.05, zF + 0.0015);
+      const W = new THREE.Vector3(sx * (wW / 2 - 0.015), -0.09, 0.0045);
       const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 1, 0.002).translate(0, 0.5, 0), mats.metal);
       bar.castShadow = true; bar.position.copy(F);
       const pinF = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.012, 10).rotateX(Math.PI / 2), mats.metal);
@@ -493,7 +508,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
       stays.push({ bar, F, W });
     }
     fg.add(doorPivot, winPivot);
-    winPivot.userData = { kind: 'window', open: 0, target: 0, max: THREE.MathUtils.degToRad(55), stays };
+    winPivot.userData = { kind: 'window', open: 0, target: 0, max: THREE.MathUtils.degToRad(60), stays };
     leaves.push(winPivot);
     if (sign < 0) fg.rotation.y = Math.PI;
     group.add(fg);
@@ -501,6 +516,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
   buildFront(1); buildFront(-1);
 
   /* --- Erde --- */
+  mats.soil.userData.half.value.set(D.R, L / 2);
   const soilGeo = new THREE.PlaneGeometry(2 * D.R, L, 1, 1);
   soilGeo.rotateX(-Math.PI / 2);
   const uvs = soilGeo.attributes.uv;

@@ -9,17 +9,17 @@
   <title>Gewächshaus 3D – Konfigurator</title>
   <style>
     :root {
-      --bg: #e9eef1; --panel: rgba(255,255,255,.78); --ink: #16221b; --muted: #5b6b61;
+      --bg: #e9eef1; --panel: rgba(255,255,255,.9); --ink: #16221b; --muted: #5b6b61;
       --line: rgba(22,34,27,.12); --accent: #1f7a4d; --accent-ink: #fff;
       --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
     @media (prefers-color-scheme: dark) {
-      :root { --bg: #11181a; --panel: rgba(24,32,30,.78); --ink: #e8f0eb; --muted: #9fb2a6; --line: rgba(232,240,235,.14); --accent: #4fc08a; --accent-ink: #06210f; }
+      :root { --bg: #11181a; --panel: rgba(24,32,30,.9); --ink: #e8f0eb; --muted: #9fb2a6; --line: rgba(232,240,235,.14); --accent: #4fc08a; --accent-ink: #06210f; }
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font-family: var(--font); overflow: hidden; }
     canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-    .panel { position: fixed; background: var(--panel); backdrop-filter: blur(16px) saturate(1.3); -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    .panel { position: fixed; background: var(--panel);
       border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
     #info { top: max(16px, env(safe-area-inset-top)); left: 16px; padding: 14px 16px; max-width: 300px; }
     #info h1 { font-size: 16px; margin: 0 0 4px; letter-spacing: -.01em; }
@@ -47,12 +47,18 @@
     #walkui { display: none; }
     body.walking #walkui { display: block; }
     body.walking #bar, body.walking #info { display: none; }
-    #b-exit { position: fixed; top: max(14px, env(safe-area-inset-top)); right: 14px; background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); z-index: 5; }
+    #b-exit { position: fixed; top: max(14px, env(safe-area-inset-top)); right: 14px; background: var(--panel); z-index: 5; }
     #hint { left: 50%; transform: translateX(-50%); bottom: 24px; padding: 10px 14px; font-size: 13px; opacity: 0; transition: opacity .4s; pointer-events: none; text-align: center; width: max-content; max-width: calc(100vw - 32px); }
     #hint.show { opacity: 1; }
-    #joy { display: none; position: fixed; left: max(22px, env(safe-area-inset-left)); bottom: max(34px, env(safe-area-inset-bottom)); width: 112px; height: 112px; border-radius: 50%; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); backdrop-filter: blur(6px); touch-action: none; }
+    #joy { display: none; position: fixed; left: max(22px, env(safe-area-inset-left)); bottom: max(34px, env(safe-area-inset-bottom)); width: 112px; height: 112px; border-radius: 50%; background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.35); touch-action: none; }
     #joy-knob { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; border-radius: 50%; background: rgba(255,255,255,.7); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
     @media (pointer: coarse) { body.walking #joy { display: block; } #hint { bottom: 170px; } }
+    .status { display: flex; align-items: center; gap: 10px; justify-content: center; font-size: 13px; margin: 12px 0; min-height: 22px; }
+    .spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: sp .8s linear infinite; flex: none; }
+    @keyframes sp { to { transform: rotate(360deg); } }
+    .row { display: flex; gap: 10px; justify-content: center; margin-top: 6px; }
+    button:disabled { opacity: .45; cursor: default; }
+    @media (pointer: coarse) { #vignette { display: none; } }
     #modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8,12,10,.45); z-index: 20; padding: 16px; }
     #modal[hidden] { display: none; }
     #modal-body.card { position: static; padding: 20px; max-width: 380px; text-align: center; }

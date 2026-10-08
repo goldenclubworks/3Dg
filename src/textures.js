@@ -130,7 +130,7 @@ export function grassTextures(size = 2048) {
     const f = fbm(n, x / size, y / size, 8, 5);
     const g = fbm(n, x / size + 0.25, y / size + 0.5, 8, 3);
     const i = (y * size + x) * 4;
-    const l = 0.55 + f * 0.55;
+    const l = 0.84 + f * 0.26;
     img.data[i] = (70 + 44 * g) * l; img.data[i + 1] = (96 + 44 * f) * l; img.data[i + 2] = (44 + 22 * g) * l; img.data[i + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
