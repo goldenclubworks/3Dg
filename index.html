@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#1f7a4d" />
-  <meta name="description" content="3D-Konfigurator für Tonnengewächshäuser (3 × 4–10 m) mit AR-Ansicht" />
+  <meta name="description" content="Prima Garten Gewächshaus Ceres in 3D: 3 × 4–10 m, begehbar in Originalgröße, mit AR-Ansicht" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Cpath d=%27M3 27V17C3 9 9 5 16 5s13 4 13 12v10z%27 fill=%27%231f7a4d%27/%3E%3C/svg%3E" />
-  <title>Gewächshaus 3D – Konfigurator</title>
+  <title>Ceres Gewächshaus 3D – Prima Garten</title>
   <style>
     :root {
       --bg: #e9eef1; --panel: rgba(255,255,255,.9); --ink: #16221b; --muted: #5b6b61;
@@ -21,8 +21,12 @@
     canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
     .panel { position: fixed; background: var(--panel);
       border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
-    #info { top: max(16px, env(safe-area-inset-top)); left: 16px; padding: 14px 16px; max-width: 300px; }
-    #info h1 { font-size: 16px; margin: 0 0 4px; letter-spacing: -.01em; }
+    #info { top: max(16px, env(safe-area-inset-top)); left: 16px; padding: 10px 14px 14px; width: 262px; }
+    #info .brand { background: #fff; border-radius: 12px; margin: 0 -4px 10px; padding: 4px 10px; display: flex; justify-content: center; box-shadow: inset 0 0 0 1px rgba(31,90,92,.10); }
+    #info .brand img { display: block; width: 100%; max-width: 216px; height: auto; }
+    #info .eyebrow { display: block; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin-bottom: 1px; }
+    #info h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; font-weight: 700; }
+    #info h1 small { font-size: 13px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
     #info p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.45; }
     #info dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 10px 0 0; font-size: 13px; }
     #info dt { color: var(--muted); } #info dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -66,7 +70,10 @@
     .qr { width: 200px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 6px; } .qr svg { display: block; width: 100%; height: auto; }
     #b-more { display: none; }
     @media (max-width: 640px) {
-      #info { right: 16px; max-width: none; padding: 10px 12px; } #info p, #info dl { display: none; } #info h1 { margin: 0; font-size: 15px; }
+      #info { right: auto; width: auto; padding: 6px 12px 6px 6px; display: flex; align-items: center; gap: 10px; }
+      #info p, #info dl, #info .eyebrow { display: none; }
+      #info .brand { margin: 0; padding: 2px 8px; flex: none; } #info .brand img { width: 84px; }
+      #info h1 { margin: 0; font-size: 17px; }
       #bar { padding: 8px; gap: 8px 12px; width: calc(100vw - 24px); bottom: max(10px, env(safe-area-inset-bottom)); }
       #bar .more { display: none; } #bar.open .more { display: flex; }
       #b-more { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; }
@@ -79,14 +86,15 @@
   <canvas id="c"></canvas>
 
   <section id="info" class="panel">
-    <h1>Gewächshaus 3 × <span id="i-len">4</span> m</h1>
-    <p>Bogenprofil, Hohlkammerplatten, Tür und Lüftungsfenster. Tür/Fenster anklicken zum Öffnen.</p>
+    <div class="brand"><img src="/logo.jpg" alt="Prima Garten" width="230" height="96" decoding="async" /></div>
+    <div class="title"><span class="eyebrow">Polycarbonat-Gewächshaus</span><h1>Ceres <small>3 × <span id="i-len">4</span> m</small></h1></div>
+    <p>Tür oder Fenster antippen zum Öffnen. „Reingehen“ für den Rundgang in Originalgröße.</p>
     <dl>
-      <dt>Breite</dt><dd>3,00 m</dd>
+      <dt>Breite · Höhe</dt><dd>3,00 · 2,00 m</dd>
       <dt>Länge</dt><dd id="d-len">4,00 m</dd>
-      <dt>Höhe</dt><dd>2,00 m</dd>
       <dt>Grundfläche</dt><dd id="d-area">12 m²</dd>
-      <dt>Bögen</dt><dd id="d-arch">–</dd>
+      <dt>Tür</dt><dd>0,90 × 1,80 m</dd>
+      <dt>Bögen (0,67 m)</dt><dd id="d-arch">–</dd>
     </dl>
   </section>
 

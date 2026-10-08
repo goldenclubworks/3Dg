@@ -6,9 +6,9 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 
 export const D = {
   R: 1.5,            // Außenradius inkl. Platte
-  SHEET: 0.006,      // Plattendicke (6 mm Hohlkammer)
+  SHEET: 0.004,      // Plattendicke (4 mm Hohlkammer, Standard laut Hersteller)
   WALL: 0.5,         // senkrechtes Stück unter dem Halbkreis  -> 0.5 + 1.5 = 2.0 m Firsthöhe
-  ARCH_D: 0.04,      // Bogenprofil: 40 mm entlang der Länge
+  ARCH_D: 0.02,      // Rohr 20 x 20 mm (feuerverzinkt)
   ARCH_T: 0.02,      // 20 mm radial
   LEG_H: 0.05,       // Grundrahmen: senkrechter Schenkel
   LEG_T: 0.0025,     // Blechstärke Winkelprofil
@@ -19,7 +19,7 @@ export const D = {
 D.RO = D.R - D.SHEET;      // Außenkante Bogen
 D.RI = D.RO - D.ARCH_T;    // Innenkante Bogen
 
-export const DOOR = { clear: 1.62, width: 0.9 };   // lichte Höhe unter dem Kopfriegel
+export const DOOR = { clear: 1.38, width: 0.9, unitHeight: 1.8 };   // Türeinheit 1,80 x 0,90 m = Tür (lichte Höhe 1,38 m) + Lüftungsklappe darüber
 
 export const TIERS = {
   high:   { Na: 180, rb: 3, arch: 140, bevel: 3, crease: 0.62, lathe: 24, cyl: 24, pitch: 0.3 },
@@ -266,6 +266,7 @@ function hingeLeaf(axis) {
 export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality = 'high' }) {
   const tier = TIERS[quality] || TIERS.high;
   const boxGeo = makeBox(tier);
+  const M = D.ARCH_D;                 // Rohrquerschnitt 20 mm
   const twoSided = quality === 'ar';
   const twin = (mesh, parent) => {
     if (!twoSided) return;
@@ -316,7 +317,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
   for (const aDeg of rodAngles) {
     const a = THREE.MathUtils.degToRad(aDeg);
     const c = new THREE.Vector3(rc * Math.cos(a), D.WALL + rc * Math.sin(a), 0);
-    parts.galv.push(placed(boxGeo(0.04, 0.02, rodLen, 0.0016), c, a - Math.PI / 2));
+    parts.galv.push(placed(boxGeo(0.02, 0.02, rodLen, 0.0016), c, a - Math.PI / 2));
     const radial = new THREE.Vector3(Math.cos(a), Math.sin(a), 0);
     const inward = radial.clone().negate();
     for (const z of [...innerZ, -hz + D.ARCH_D * 1.5, hz - D.ARCH_D * 1.5]) {
@@ -369,8 +370,8 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
   const leaves = [];
   const frontSheets = new THREE.Group(); frontSheets.name = 'stirnplatten';
   const DW = 0.9;                // lichte Türbreite
-  const postX = DW / 2 + 0.015;  // Mitte der Pfosten
-  const yWinTop = 1.87, yWinBot = 1.65, yDoorTop = 1.62, yDoorBot = 0.056;
+  const postX = DW / 2 + M / 2;  // Mitte der Pfosten
+  const yWinTop = 1.78, yWinBot = 1.40, yDoorTop = 1.38, yDoorBot = 0.056;   // Einheit endet bei 1,78 + 0,02 = 1,80 m
   const braceY = 0.70;
   const archInnerY = (x) => D.WALL + Math.sqrt(D.RI * D.RI - x * x);
   const baseTop = D.LEG_H;
@@ -379,24 +380,25 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     const zF = hz;                                 // wir bauen für +z und drehen für −z
     const mY = sign > 0 ? new THREE.Matrix4() : new THREE.Matrix4().makeRotationY(Math.PI);
     const addS = (key, g) => parts[key].push(g.applyMatrix4(mY));
-    const zb = zF - 0.025;                         // Mitte Pfosten / Querstreben (30 mm)
+    const zb = zF - D.ARCH_D / 2;                  // Mitte Pfosten / Querstreben (bündig mit dem Bogenring)
+    const zS = zF - D.ARCH_D / 2;                  // Ebene der Stirnplatte
 
     // Pfosten
     for (const sx of [-1, 1]) {
       const xTop = sx * postX, top = archInnerY(Math.abs(xTop)) + 0.004;
-      addS('galv', boxGeo(0.03, top - baseTop, 0.03).translate(xTop, (top + baseTop) / 2, zb));
+      addS('galv', boxGeo(M, top - baseTop, M).translate(xTop, (top + baseTop) / 2, zb));
     }
     // Kopfriegel der Tür, oberer Fensterriegel
-    addS('galv', boxGeo(DW, 0.03, 0.03).translate(0, (yDoorTop + yWinBot) / 2, zb));
-    addS('galv', boxGeo(DW, 0.03, 0.03).translate(0, yWinTop + 0.015, zb));
+    addS('galv', boxGeo(DW, M, M).translate(0, (yDoorTop + yWinBot) / 2, zb));
+    addS('galv', boxGeo(DW, M, M).translate(0, yWinTop + M / 2, zb));
     // Querstreben links/rechts
     for (const sx of [-1, 1]) {
-      const x0 = postX + 0.015, x1 = D.RI - 0.004, len = x1 - x0;
-      addS('galv', boxGeo(len, 0.03, 0.03).translate(sx * (x0 + len / 2), braceY, zb));
+      const x0 = postX + M / 2, x1 = D.RI - 0.004, len = x1 - x0;
+      addS('galv', boxGeo(len, M, M).translate(sx * (x0 + len / 2), braceY, zb));
     }
     // Scharniere (fest)
     const pivotZ = zF - 0.003;
-    for (const hy of [0.3, 1.3]) for (const g of hingeStatic(new THREE.Vector3(DW / 2, hy, pivotZ), 'y', tier)) addS('metal', g);
+    for (const hy of [0.3, 1.2]) for (const g of hingeStatic(new THREE.Vector3(DW / 2, hy, pivotZ), 'y', tier)) addS('metal', g);
     for (const hx of [-0.3, 0.3]) for (const g of hingeStatic(new THREE.Vector3(hx, yWinTop, pivotZ), 'x', tier)) addS('metal', g);
 
     // Stirnplatten-Schrauben entlang des Rings
@@ -414,30 +416,30 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
       else if (s > D.WALL + Math.PI * rr) p = new THREE.Vector3(rr, D.WALL - (s - D.WALL - Math.PI * rr), 0);
       else { const th = Math.PI - (s - D.WALL) / rr; p = new THREE.Vector3(rr * Math.cos(th), D.WALL + rr * Math.sin(th), 0); }
       if (p.y < 0.1 || (Math.abs(p.x) < 0.52 && p.y < 1.95)) continue;
-      p.z = zF - 0.02 + 0.004;
+      p.z = zS + 0.004;
       addFS(p);
     }
     for (const sx of [-1, 1]) for (const f of [0.18, 0.55, 0.9]) {
-      addFS(new THREE.Vector3(sx * (postX + 0.015 + f * (D.RI - 0.02 - postX - 0.015)), braceY, zF - 0.02 + 0.004));
+      addFS(new THREE.Vector3(sx * (postX + M / 2 + f * (D.RI - 0.02 - postX - M / 2)), braceY, zS + 0.004));
     }
 
     // Endprofil am Fuß der seitlichen Stirnplatten (Innenseite)
     for (const sx of [-1, 1]) {
-      const x0 = postX + 0.015, x1 = D.RI, len = x1 - x0;
-      addS('cap', boxGeo(len, D.FOOT, D.SHEET + 0.0044, 0.0004).translate(sx * (x0 + len / 2), D.FOOT / 2, zF - 0.02));
-      addS('cap', boxGeo(len, 0.02, 0.0022, 0.0006).translate(sx * (x0 + len / 2), 0.011, zF - 0.02 - D.SHEET / 2 - 0.0033));
+      const x0 = postX + M / 2, x1 = D.RI, len = x1 - x0;
+      addS('cap', boxGeo(len, D.FOOT, D.SHEET + 0.0044, 0.0004).translate(sx * (x0 + len / 2), D.FOOT / 2, zS));
+      addS('cap', boxGeo(len, 0.02, 0.0022, 0.0006).translate(sx * (x0 + len / 2), 0.011, zS - D.SHEET / 2 - 0.0033));
     }
 
     // Türhaken: Öse am Pfosten (innen)
-    addS('metal', new THREE.TorusGeometry(0.0055, 0.0016, 8, 16).rotateY(Math.PI / 2).translate(-postX + 0.004, yDoorBot + 0.9, zF - 0.043));
+    addS('metal', new THREE.TorusGeometry(0.0055, 0.0016, 8, 16).rotateY(Math.PI / 2).translate(-postX + 0.004, yDoorBot + 0.9, zF - 0.031));
 
     /* Stirn-Platte (mit Aussparung für Tür+Fenster) */
-    const Rs = D.RI + 0.01, dx = DW / 2, topCut = yWinTop + 0.015;
+    const Rs = D.RI + 0.01, dx = DW / 2, topCut = yWinTop + M / 2;
     const sh = new THREE.Shape();
     sh.moveTo(-Rs, 0); sh.lineTo(-dx, 0); sh.lineTo(-dx, topCut); sh.lineTo(dx, topCut); sh.lineTo(dx, 0);
     sh.lineTo(Rs, 0); sh.lineTo(Rs, D.WALL); sh.absarc(0, D.WALL, Rs, 0, Math.PI, false); sh.lineTo(-Rs, 0);
     const fp = new THREE.Mesh(flutedPlane(sh, tier.Na), mats.sheetDouble);
-    fp.position.set(0, 0, sign > 0 ? zF - 0.02 : -(zF - 0.02));
+    fp.position.set(0, 0, sign > 0 ? zS : -zS);
     fp.rotation.y = sign > 0 ? 0 : Math.PI;
     fp.name = 'stirnplatte'; fp.renderOrder = 3;
     frontSheets.add(fp); twin(fp, frontSheets);
@@ -447,25 +449,25 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     doorPivot.position.set(DW / 2, yDoorBot, pivotZ);
     const leafW = DW - 0.004, leafH = yDoorTop - yDoorBot;
     const dparts = [
-      boxGeo(0.03, leafH, 0.03).translate(-0.015, leafH / 2, -0.017),
-      boxGeo(0.03, leafH, 0.03).translate(-leafW + 0.015, leafH / 2, -0.017),
-      boxGeo(leafW - 0.06, 0.03, 0.03).translate(-leafW / 2, 0.015, -0.017),
-      boxGeo(leafW - 0.06, 0.03, 0.03).translate(-leafW / 2, leafH - 0.015, -0.017),
+      boxGeo(M, leafH, M).translate(-M / 2, leafH / 2, -0.012),
+      boxGeo(M, leafH, M).translate(-leafW + M / 2, leafH / 2, -0.012),
+      boxGeo(leafW - 2 * M, M, M).translate(-leafW / 2, M / 2, -0.012),
+      boxGeo(leafW - 2 * M, M, M).translate(-leafW / 2, leafH - M / 2, -0.012),
     ];
     const dMesh = new THREE.Mesh(mergeGeometries(dparts.map(flatten)), mats.galv);
     dMesh.castShadow = true; dMesh.name = 'tuerrahmen';
     doorPivot.add(dMesh);
-    const dSheet = new THREE.Mesh(rectPlane(leafW - 0.04, leafH - 0.04, -leafW / 2, leafH / 2), mats.sheetDouble);
-    dSheet.position.z = -0.017; dSheet.renderOrder = 3; dSheet.name = 'tuerplatte';
+    const dSheet = new THREE.Mesh(rectPlane(leafW - 2 * M, leafH - 2 * M, -leafW / 2, leafH / 2), mats.sheetDouble);
+    dSheet.position.z = -0.012; dSheet.renderOrder = 3; dSheet.name = 'tuerplatte';
     doorPivot.add(dSheet); twin(dSheet, doorPivot);
     const dm = [];
-    for (const hy of [0.3, 1.3]) dm.push(hingeLeaf('y').translate(0, hy - yDoorBot, 0));
+    for (const hy of [0.3, 1.2]) dm.push(hingeLeaf('y').translate(0, hy - yDoorBot, 0));
     // Griff + Riegel außen, Haken innen
     dm.push(new THREE.BoxGeometry(0.022, 0.1, 0.002).translate(-leafW + 0.035, 0.88, 0.0));
     dm.push(new THREE.BoxGeometry(0.012, 0.075, 0.012).translate(-leafW + 0.035, 0.88, 0.007));
     dm.push(new THREE.BoxGeometry(0.03, 0.02, 0.003).translate(-leafW + 0.02, 0.62, 0.0));
-    dm.push(new THREE.BoxGeometry(0.05, 0.004, 0.003).translate(-leafW + 0.027, 0.9, -0.0345));      // Haken-Arm
-    dm.push(new THREE.TorusGeometry(0.0045, 0.0014, 6, 12).rotateY(Math.PI / 2).translate(-leafW, 0.9, -0.0345));
+    dm.push(new THREE.BoxGeometry(0.05, 0.004, 0.003).translate(-leafW + 0.027, 0.9, -0.0245));      // Haken-Arm
+    dm.push(new THREE.TorusGeometry(0.0045, 0.0014, 6, 12).rotateY(Math.PI / 2).translate(-leafW, 0.9, -0.0245));
     const dMetal = new THREE.Mesh(mergeGeometries(dm.map(flatten)), mats.metal);
     dMetal.castShadow = true; doorPivot.add(dMetal);
     doorPivot.userData = { kind: 'door', open: 0, target: 0, max: THREE.MathUtils.degToRad(105) };
@@ -476,16 +478,16 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     winPivot.position.set(0, yWinTop, pivotZ);
     const wH = yWinTop - yWinBot - 0.004, wW = DW - 0.004;
     const wparts = [
-      boxGeo(0.03, wH, 0.03).translate(-wW / 2 + 0.015, -wH / 2, -0.017),
-      boxGeo(0.03, wH, 0.03).translate(wW / 2 - 0.015, -wH / 2, -0.017),
-      boxGeo(wW - 0.06, 0.03, 0.03).translate(0, -0.015, -0.017),
-      boxGeo(wW - 0.06, 0.03, 0.03).translate(0, -wH + 0.015, -0.017),
+      boxGeo(M, wH, M).translate(-wW / 2 + M / 2, -wH / 2, -0.012),
+      boxGeo(M, wH, M).translate(wW / 2 - M / 2, -wH / 2, -0.012),
+      boxGeo(wW - 2 * M, M, M).translate(0, -M / 2, -0.012),
+      boxGeo(wW - 2 * M, M, M).translate(0, -wH + M / 2, -0.012),
     ];
     const wMesh = new THREE.Mesh(mergeGeometries(wparts.map(flatten)), mats.galv);
     wMesh.castShadow = true; wMesh.name = 'fensterrahmen';
     winPivot.add(wMesh);
-    const wSheet = new THREE.Mesh(rectPlane(wW - 0.04, wH - 0.04, 0, -wH / 2), mats.sheetDouble);
-    wSheet.position.z = -0.017; wSheet.renderOrder = 3; wSheet.name = 'fensterplatte';
+    const wSheet = new THREE.Mesh(rectPlane(wW - 2 * M, wH - 2 * M, 0, -wH / 2), mats.sheetDouble);
+    wSheet.position.z = -0.012; wSheet.renderOrder = 3; wSheet.name = 'fensterplatte';
     winPivot.add(wSheet); twin(wSheet, winPivot);
     const wm = [hingeLeaf('x').translate(-0.3, 0, 0), hingeLeaf('x').translate(0.3, 0, 0)];
     wm.push(new THREE.BoxGeometry(0.05, 0.02, 0.002).translate(0, -wH + 0.03, 0.0));
@@ -499,7 +501,7 @@ export function buildGreenhouse({ length = 4, spacing = 'dense', mats, quality =
     const stays = [];
     for (const sx of [-1, 1]) {
       const F = new THREE.Vector3(sx * postX, yWinBot + 0.05, zF + 0.0015);
-      const W = new THREE.Vector3(sx * (wW / 2 - 0.015), -0.09, 0.0045);
+      const W = new THREE.Vector3(sx * (wW / 2 - M / 2), -0.1, 0.0045);
       const bar = new THREE.Mesh(new THREE.BoxGeometry(0.012, 1, 0.002).translate(0, 0.5, 0), mats.metal);
       bar.castShadow = true; bar.position.copy(F);
       const pinF = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.004, 0.012, 10).rotateX(Math.PI / 2), mats.metal);

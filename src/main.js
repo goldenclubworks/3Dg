@@ -172,6 +172,52 @@ const contact = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 
 contact.position.y = -0.008; contact.renderOrder = 1; contact.name = 'kontaktschatten';
 scene.add(contact);
 
+/* ---------- Garten-Schild mit Logo und Name (nur in der Szene, nicht in AR) ---------- */
+const signCanvas = document.createElement('canvas'); signCanvas.width = 1024; signCanvas.height = 660;
+const signTex = new THREE.CanvasTexture(signCanvas); signTex.colorSpace = THREE.SRGBColorSpace;
+signTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+const logoImg = new Image(); let logoReady = false;
+logoImg.onload = () => { logoReady = true; drawSign(); }; logoImg.src = '/logo.jpg';
+function spaced(ctx, text, cx, y, gap) {
+  const w = [...text].reduce((a, ch) => a + ctx.measureText(ch).width + gap, -gap); let x = cx - w / 2;
+  ctx.textAlign = 'left';
+  for (const ch of text) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + gap; }
+}
+function drawSign() {
+  const c = signCanvas, x = c.getContext('2d'), W = c.width, H = c.height;
+  x.fillStyle = '#f5f2e8'; x.fillRect(0, 0, W, H);
+  x.strokeStyle = '#3b8184'; x.lineWidth = 10; x.strokeRect(26, 26, W - 52, H - 52);
+  x.strokeStyle = 'rgba(59,129,132,.35)'; x.lineWidth = 3; x.strokeRect(46, 46, W - 92, H - 92);
+  if (logoReady) {
+    x.globalCompositeOperation = 'multiply';
+    const lw = 800, lh = lw * logoImg.naturalHeight / logoImg.naturalWidth;
+    x.drawImage(logoImg, (W - lw) / 2, 52, lw, lh);
+    x.globalCompositeOperation = 'source-over';
+  }
+  x.fillStyle = '#27595c'; x.font = '700 128px Georgia, "Times New Roman", serif'; x.textBaseline = 'alphabetic';
+  spaced(x, 'CERES', W / 2, 522, 28);
+  x.fillStyle = '#5d8587'; x.font = '500 38px system-ui, -apple-system, "Segoe UI", sans-serif';
+  x.textAlign = 'center'; x.fillText(`Polycarbonat-Gewächshaus · 3 × ${state.length} m`, W / 2, 588);
+  signTex.needsUpdate = true; invalidate();
+}
+const wood = new THREE.MeshStandardMaterial({ color: 0x5b4a3a, roughness: 0.85, metalness: 0 });
+const signGroup = new THREE.Group(); signGroup.name = 'schild';
+{
+  const post = new THREE.BoxGeometry(0.05, 1.08, 0.05).translate(0, 0.54 - 0.08, 0);
+  for (const sx of [-0.25, 0.25]) { const m = new THREE.Mesh(post, wood); m.position.x = sx; signGroup.add(m); }
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.46, 0.035), wood); frame.position.set(0, 0.78, 0.02); signGroup.add(frame);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.64, 0.64 * 660 / 1024), new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.92, metalness: 0, envMapIntensity: 0.35 }));
+  face.position.set(0, 0.78, 0.0385); signGroup.add(face);
+}
+scene.add(signGroup);
+const signPos = new THREE.Vector2();
+function placeSign() {
+  const hz = state.length / 2;
+  signGroup.position.set(2.15, 0, hz + 1.55); signGroup.rotation.y = -0.42;
+  signPos.set(signGroup.position.x, signGroup.position.z);
+  drawSign();
+}
+
 /* ---------- Gewächshaus ---------- */
 let gh = null;
 const state = { length: 4, spacing: 'dense' };
@@ -181,6 +227,7 @@ function rebuild() {
   gh = buildGreenhouse({ length: state.length, spacing: state.spacing, mats, quality });
   scene.add(gh.group);
   gh.setLeaf('door', open.door, true); gh.setLeaf('window', open.window, true);
+  placeSign();
   contact.scale.set(3 + 1.9, 1, state.length + 1.9);
   // Schatten nur für das Innere (Bögen auf der Erde): kleine, scharfe Shadow-Map
   const ext = Math.max(state.length / 2, 3) + 1.5;
@@ -244,6 +291,7 @@ function ceilAt(x, z) {
 function canStand(x, z) {
   const hz = state.length / 2;
   if (Math.hypot(x, z) > 60) return false;
+  if (Math.hypot(x - signPos.x, z - signPos.y) < 0.4) return false;       // Schild-Pfosten
   const inside = Math.abs(x) < D.R - BODY - 0.04 && Math.abs(z) < hz - 0.12;
   const outside = Math.abs(x) > D.R + 0.06 + BODY || Math.abs(z) > hz + 0.08 + BODY;
   if (inside || outside) return true;
@@ -502,6 +550,7 @@ function finishCalib() {
   const l = $('#loading'); if (l) { l.classList.add('done'); setTimeout(() => l.remove(), 800); }
 }
 renderer.setAnimationLoop(() => {
+  if (!gh) return;
   timer.update();
   const dt = Math.min(timer.getDelta(), 0.1);
   let moving = false;
@@ -535,7 +584,7 @@ renderer.setAnimationLoop(() => {
 
 setSun(LOOK.sunElev);
 $('#sun').value = LOOK.sunElev;
-rebuild();
+try { rebuild(); } catch (e) { console.error('REBUILD FAIL: ' + e.message + ' @ ' + String(e.stack).split('\n').slice(0, 3).join(' | ')); }
 views.orbit(1);
 if (!calib.active) { $('#loading').classList.add('done'); setTimeout(() => $('#loading').remove(), 800); }
 else $('#loading').textContent = 'Grafik wird angepasst …';
